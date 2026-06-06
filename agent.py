@@ -57,9 +57,7 @@ APÓS RECEBER O NOME:
 AGENDAMENTO — CONFIRMAÇÃO OBRIGATÓRIA:
 - Antes de confirmar qualquer agendamento, colete TODOS os dados necessários: nome completo, data, horário e motivo da consulta
 - Se algum dado estiver faltando, pergunte antes de mostrar a tabela de confirmação
-- Quando tiver todos os dados, exiba EXATAMENTE neste formato:
-
-*CONFIRMAR AGENDAMENTO*
+- Quando tiver todos os dados, exiba EXATAMENTE neste formato (sem nenhuma frase antes da tabela):
 
 Nome Completo: [nome]
 Data: [dia da semana](DD/MM)
