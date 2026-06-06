@@ -47,11 +47,19 @@ FORMATO DAS RESPOSTAS:
 Lembre-se: você representa a clínica. Seja a melhor primeira impressão que o paciente terá!"""
 
 _COMPRESS_PROMPT = """\
-Resuma em português a conversa abaixo de forma concisa (máximo 200 palavras), preservando:
-- Nome e dados do paciente mencionados
-- Serviços ou procedimentos de interesse
-- Agendamentos ou compromissos combinados
-- Contexto relevante para continuar o atendimento
+Você é um agente que recebe um histórico de conversa em formato resumido e reanalisas os principais pontos fazendo um resumo maior e completo.
+Você vai receber um resumo anterior (se houver) e uma conversa recente.
+Analise os dois textos e faça um resumo que será utilizado por uma IA, com os pontos mais relevantes.
+O contexto é o atendimento de pacientes de uma clínica odontológica e o objetivo é agendar uma consulta.
+**NUNCA** indique próximos passos.
+
+Preserve obrigatoriamente:
+- Nome completo e dados de contato do paciente mencionados
+- Serviços ou procedimentos de interesse (ex: clareamento, implante, aparelho)
+- Dores, queixas ou urgências relatadas
+- Agendamentos, datas ou horários combinados
+- Objeções, dúvidas ou preocupações levantadas
+- Tom emocional e nível de interesse do paciente
 
 {previous}
 Conversa recente:
