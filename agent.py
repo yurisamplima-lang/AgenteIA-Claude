@@ -1,8 +1,15 @@
 import os
 import json
+from datetime import datetime
 import redis.asyncio as aioredis
 from openai import OpenAI
 from services import CLINIC_INFO, SERVICES
+
+_DAYS_PT = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+
+def _today_context() -> str:
+    now = datetime.now()
+    return f"Hoje é {_DAYS_PT[now.weekday()]}, {now.strftime('%d/%m/%Y')}. Use esta data para calcular corretamente dias da semana ao confirmar agendamentos."
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -138,6 +145,7 @@ async def get_response(phone: str, user_message: str) -> str:
     history.append({"role": "user", "content": user_message})
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.append({"role": "system", "content": _today_context()})
     if summary:
         messages.append({"role": "system", "content": f"Resumo do atendimento anterior:\n{summary}"})
     messages.extend(history)
