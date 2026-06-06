@@ -130,7 +130,7 @@ async def webhook(request: Request):
         return {"status": "ok"}
 
     await redis_client.rpush(f"msgs:{phone}", text)
-    await redis_client.expire(f"timer:{phone}", DEBOUNCE_SECONDS)
+    await redis_client.set(f"timer:{phone}", "1", ex=DEBOUNCE_SECONDS)
 
     if phone not in _active_timers:
         _active_timers.add(phone)
