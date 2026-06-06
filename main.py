@@ -1,8 +1,11 @@
 import os
+import asyncio
 import httpx
 import logging
+import redis.asyncio as aioredis
 from fastapi import FastAPI, Request, HTTPException
 from dotenv import load_dotenv
+import agent
 from agent import get_response, clear_history
 
 load_dotenv()
@@ -15,6 +18,25 @@ app = FastAPI(title="OdontoSorriso WhatsApp Agent")
 EVOLUTION_URL = os.getenv("EVOLUTION_URL", "").rstrip("/")
 EVOLUTION_TOKEN = os.getenv("EVOLUTION_TOKEN", "")
 EVOLUTION_INSTANCE = os.getenv("EVOLUTION_INSTANCE", "")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+DEBOUNCE_SECONDS = 10
+
+redis_client: aioredis.Redis = None
+
+# Tracks phones with an active debounce task in this process
+_active_timers: set[str] = set()
+
+
+@app.on_event("startup")
+async def startup():
+    global redis_client
+    redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+    agent.init_redis(REDIS_URL)
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await redis_client.aclose()
 
 
 def send_whatsapp_message(number: str, text: str) -> bool:
@@ -41,7 +63,6 @@ def extract_message_data(data: dict) -> tuple[str | None, str | None, str | None
             return None, None, None
 
         remote_jid = key.get("remoteJid", "")
-        # Skip group messages
         if "@g.us" in remote_jid:
             return None, None, None
 
@@ -60,6 +81,28 @@ def extract_message_data(data: dict) -> tuple[str | None, str | None, str | None
         return None, None, None
 
 
+async def debounce_worker(phone: str):
+    """Poll until timer:{phone} expires, then process all queued messages at once."""
+    while True:
+        await asyncio.sleep(1)
+        ttl = await redis_client.ttl(f"timer:{phone}")
+        if ttl < 0:  # -2 = key gone (expired), -1 = no TTL (shouldn't happen)
+            break
+
+    messages = await redis_client.lrange(f"msgs:{phone}", 0, -1)
+    await redis_client.delete(f"msgs:{phone}", f"timer:{phone}")
+    _active_timers.discard(phone)
+
+    if not messages:
+        return
+
+    combined = "\n".join(messages)
+    log.info(f"Processing {len(messages)} queued message(s) from {phone}: {combined[:120]}")
+
+    response_text = await get_response(phone, combined)
+    send_whatsapp_message(phone, response_text)
+
+
 @app.post("/webhook")
 async def webhook(request: Request):
     try:
@@ -68,7 +111,6 @@ async def webhook(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     event = body.get("event", "")
-
     if event not in ("messages.upsert", "messages.update"):
         return {"status": "ignored", "event": event}
 
@@ -80,16 +122,21 @@ async def webhook(request: Request):
 
     log.info(f"Message from {name} ({phone}): {text[:80]}")
 
-    # Reset conversation command
     if text.strip().lower() in ("/reset", "reiniciar", "reset"):
-        clear_history(phone)
+        await redis_client.delete(f"msgs:{phone}", f"timer:{phone}")
+        _active_timers.discard(phone)
+        await clear_history(phone)
         send_whatsapp_message(phone, "Conversa reiniciada! Como posso te ajudar? 😊")
         return {"status": "ok"}
 
-    response_text = get_response(phone, text)
-    send_whatsapp_message(phone, response_text)
+    await redis_client.rpush(f"msgs:{phone}", text)
+    await redis_client.expire(f"timer:{phone}", DEBOUNCE_SECONDS)
 
-    return {"status": "ok"}
+    if phone not in _active_timers:
+        _active_timers.add(phone)
+        asyncio.create_task(debounce_worker(phone))
+
+    return {"status": "queued"}
 
 
 @app.get("/health")
