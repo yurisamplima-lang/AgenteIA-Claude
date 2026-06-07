@@ -105,6 +105,9 @@ async def debounce_worker(phone: str):
 
 @app.post("/webhook")
 async def webhook(request: Request):
+    if os.getenv("AGENT_ENABLED", "true").lower() == "false":
+        return {"status": "disabled"}
+
     try:
         body = await request.json()
     except Exception:
